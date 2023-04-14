@@ -43,7 +43,7 @@ int main( )
 						else exit( 0 );
 					}
 					else {
-						std::cout << "CDOTACamera or SetRenderingEnabled not found" << std::endl;
+						std::cout << "CDOTACamera not found" << std::endl;
 						std::system( "pause" );
 						exit( 1 );
 					}
