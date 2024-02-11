@@ -38,7 +38,7 @@ inline T GetInterface( blackbone::Process* proc, const wchar_t* dllname, const c
 	if ( const auto callResult = pFN.Call( interfacename, &iRetCode ); callResult.success( ) ) {
 		return reinterpret_cast<T>( callResult.result( ) );
 	}
-	return nullptr;
+	return (T)nullptr;
 }
 
 std::uintptr_t GetAbsoluteAddress( blackbone::ProcessMemory* mem, std::uintptr_t instruction_ptr, int offset = 3, int size = 7 )
@@ -123,8 +123,24 @@ public:
 		this->baseAddr = baseAddr;
 	}
 
-	void SetDistance( float distance ) noexcept { // 0x270
-		memory->Write<float>( baseAddr + 0x270, distance );
+	void SetDistance( float distance ) noexcept {
+		static bool first = true;
+		if (first) {
+			constexpr const char* bytes = "\xF3\x0F\x10\xBF\x5C\x01\x00\x00"; // movss xmm7, dword ptr [rdi+15C]
+			std::vector<blackbone::ptr_t> search_result;
+			blackbone::PatternSearch patch_pattern{ "\xF3\x0F\x11\xBF\xCC\xCC\xCC\xCC\x0F\x2F\xB7" };
+			patch_pattern.SearchRemote(*memory->process(), 0xCC, memory->process()->modules().GetModule(L"client.dll").get()->baseAddress, memory->process()->modules().GetModule(L"client.dll").get()->size, search_result, 1);
+			if (!search_result.empty()) {
+				memory->Write(search_result.front(), 8, bytes);
+			}
+			else {
+				std::cout << "instruction already patched or pattern is outdated\n";
+			}
+
+			first = false;
+		}
+
+		memory->Write<float>( baseAddr + 0x015c, distance );
 	}
 
 	void SetFOWAmount( float amount ) // 0x70
@@ -204,11 +220,4 @@ CDOTA_Camera FindCamera( blackbone::Process& proc ) {
 	}
 
 	return CDOTA_Camera{ nullptr, 0 };
-}
-
-std::uintptr_t FindEntitySystem( blackbone::Process& process ) {
-	DefClass interface002{ &process.memory( ), GetInterface<std::uintptr_t>( &process, L"client.dll", "Source2Client002" ) };
-	const auto GameEntitySystem_result = process.memory( ).Read<std::uintptr_t>( GetAbsoluteAddress( &process.memory( ), interface002.GetVF( 25 ) ) );
-
-	return GameEntitySystem_result.success( ) ? GameEntitySystem_result.result( ) : 0;
 }
