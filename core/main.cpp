@@ -1,15 +1,15 @@
 #include "dota_sdk.hpp"
 
-[[nodiscard]] inline byte req_action( byte w ) {
+[[nodiscard]] inline int req_action( byte w ) {
 	if ( w == 0 ) {
-		byte act1;
+		int act1;
 
 		std::cout << "=================================\n[0] Change camera distance\n[1] Patch ZFar\n[2] Toggle Fog\n=> ";
 		std::cin >> act1;
 		return act1;
 	}
 	else {
-		float dist;
+		int dist;
 		std::system( "cls" );
 		std::cout << "=> ";
 		std::cin >> dist;
@@ -22,7 +22,6 @@ void process( blackbone::Process& dota_proc, blackbone::ProcessMemory& pDOTAMemo
 	std::cout << "PID: " << std::dec << dota_proc.pid( ) << std::endl << "client.dll base: " << (void*)dota_proc.modules( ).GetModule( L"client.dll" ).get( )->baseAddress << std::endl;
 
 	auto DOTACamera = FindCamera( dota_proc );
-	const auto pGameEntitySystem = FindEntitySystem( dota_proc );
 
 	if ( DOTACamera.IsValid( ) ) {
 		const auto act = req_action( 0 );
@@ -31,10 +30,13 @@ void process( blackbone::Process& dota_proc, blackbone::ProcessMemory& pDOTAMemo
 		{
 		case 0:
 			DOTACamera.SetDistance( req_action( 1 ) );
+			break;
 		case 1:
 			DOTACamera.ToggleMaxZFar( );
+			break;
 		case 2:
 			DOTACamera.ToggleFog( );
+			break;
 		default:
 			exit( 0 );
 		}
@@ -42,8 +44,7 @@ void process( blackbone::Process& dota_proc, blackbone::ProcessMemory& pDOTAMemo
 	std::system( "cls" );
 }
 
-int main( )
-{
+int main( ) {
 	blackbone::Process dota;
 
 	if ( NT_SUCCESS( dota.Attach( L"dota2.exe" ) ) && dota.modules( ).GetModule( L"client.dll" ) ) {
