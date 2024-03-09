@@ -1,0 +1,6 @@
+Language: Cpp
+BasedOnStyle: llvm
+Standard: c++17
+TabWidth: 4
+IndentWidth: 4
+UseTab: Never
