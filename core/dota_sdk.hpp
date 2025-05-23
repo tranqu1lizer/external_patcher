@@ -12,152 +12,172 @@
 #pragma warning(disable : 6301)
 
 class DefClass {
-  public:
-    blackbone::ProcessMemory *memory;
-    std::uintptr_t baseAddr;
+public:
+	blackbone::ProcessMemory* memory;
+	std::uintptr_t baseAddr;
 
-    std::uintptr_t GetVF(unsigned short idx) noexcept {
-        const auto VMTAddr = memory->Read<std::uintptr_t>(baseAddr).result();
+	std::uintptr_t GetVF(unsigned short idx) noexcept {
+		const auto VMTAddr = memory->Read<std::uintptr_t>(baseAddr).result();
 
-        return memory->Read<std::uintptr_t>(VMTAddr + idx * 8).result();
-    }
+		return memory->Read<std::uintptr_t>(VMTAddr + idx * 8).result();
+	}
 
-    bool IsValid() { return (memory && baseAddr) ? true : false; }
+	bool IsValid() { return (memory && baseAddr) ? true : false; }
 };
-
-std::uintptr_t GetAbsoluteAddress(blackbone::ProcessMemory *mem,
-                                  std::uintptr_t instruction_ptr,
-                                  int offset = 3, int size = 7) {
-    return instruction_ptr +
-           (mem->Read<std::int32_t>(instruction_ptr + offset).result()) + size;
-}
 
 class CDOTA_Camera : public DefClass {
-  public:
-    CDOTA_Camera() {
-        memory = nullptr;
-        baseAddr = NULL;
-    }
+public:
+	CDOTA_Camera() {
+		memory = nullptr;
+		baseAddr = NULL;
+	}
 
-    CDOTA_Camera(blackbone::ProcessMemory *memory, std::uintptr_t baseAddr) {
-        this->memory = memory;
-        this->baseAddr = baseAddr;
-    }
+	CDOTA_Camera(blackbone::ProcessMemory* memory, std::uintptr_t baseAddr) {
+		this->memory = memory;
+		this->baseAddr = baseAddr;
+	}
 
-    void SetDistance(float distance)  {
-        memory->Write<float>(baseAddr + 0x2e4, distance);
-    }
+	void SetDistance(float distance) {
+		memory->Write<float>(baseAddr + 0x2e4, distance);
+	}
 
-    void SetFOWAmount(float amount) {
-        memory->Write<float>(baseAddr + 0x70, amount);
-    }
+	void SetFOWAmount(float amount) {
+		memory->Write<float>(baseAddr + 0x70, amount);
+	}
 
-    auto GetDistance() {
-        return memory->Read<float>(baseAddr + 0x270).result();
-    }
+	void SetFarZ(float farz) {
+		memory->Write<float>(baseAddr + 0x2A4, farz);
+	}
 
-    auto GetFOWAmount() {
-        return memory->Read<float>(baseAddr + 0x70).result();
-    }
+	auto GetDistance() {
+		return memory->Read<float>(baseAddr + 0x270).result();
+	}
 
-    void ToggleFog() {
-        const auto aGetFog = this->GetVF(18);
-        const auto instructionBytes = memory->Read<uintptr_t>(aGetFog).result();
+	auto GetFOWAmount() {
+		return memory->Read<float>(baseAddr + 0x70).result();
+	}
 
-        if (instructionBytes == 0x83485708245c8948) { // not patched
+	void ToggleFog() {
+		const auto aGetFog = this->GetVF(18);
+		const auto instructionBytes = memory->Read<uintptr_t>(aGetFog).result();
 
-            // 0x0F, 0x57, 0xC0 | xorps xmm0, xmm0
-            // 0xC3				| ret
-            constexpr const char *bytePatch = "\x0F\x57\xC0\xC3";
-            memory->Write(aGetFog, 4, bytePatch);
-            // std::cout << "Fog instructions patched" << std::endl;
-        } else if (instructionBytes == 0x83485708c3c0570f) { // already patched
+		if (instructionBytes == 0x83485708245c8948) { // not patched
 
-            // 0x48, 0x89, 0x5C, 0x24, 0x08 | mov qword ptr ss:[rsp+8], rbx
-            // 0x57							| push rdi
-            constexpr const char *byteRestore = "\x48\x89\x5C\x24\x08\x57";
-            memory->Write(aGetFog, 6, byteRestore);
-            // std::cout << "Fog instructions restored" << std::endl;
-        } else {
-            std::cout << "Error, unknown fog instructions: " << instructionBytes
-                      << std::endl;
-            std::system("pause");
-            exit(1);
-        }
-    }
+			// 0x0F, 0x57, 0xC0 | xorps xmm0, xmm0
+			// 0xC3				| ret
+			constexpr const char* bytePatch = "\x0F\x57\xC0\xC3\x90\x90";
+			memory->Write(aGetFog, 6, bytePatch);
+			// std::cout << "Fog instructions patched" << std::endl;
+		}
+		else if (instructionBytes == 0x83489090C3C0570F) { // already patched
 
-    void ToggleMaxZFar() {
-        const auto aGetZFar = this->GetVF(19);
-        const auto instructionBytes =
-            memory->Read<uintptr_t>(aGetZFar).result();
+			// 0x48, 0x89, 0x5C, 0x24, 0x08 | mov qword ptr ss:[rsp+8], rbx
+			// 0x57							| push rdi
+			constexpr const char* byteRestore = "\x48\x89\x5C\x24\x08\x57";
+			memory->Write(aGetFog, 6, byteRestore);
+			// std::cout << "Fog instructions restored" << std::endl;
+		}
+		else {
+			std::cout << "Error, unknown fog instructions: " << instructionBytes
+				<< std::endl;
+			std::system("pause");
+			exit(1);
+		}
+	}
 
-        if (instructionBytes == 0x83485708245c8948) { // not patched
+	void ToggleMaxZFar() {
+		const auto aGetZFar = this->GetVF(19);
+		const auto instructionBytes =
+			memory->Read<uintptr_t>(aGetZFar).result();
 
-            // 0xB8, 0x50, 0x46, 0x00, 0x00	| mov eax, 18000
-            // 0xF3, 0x0F, 0x2A, 0xC0		| cvtsi2ss xmm0, eax
-            // 0xC3							| ret
-            constexpr const char *bytePatch =
-                "\xB8\x50\x46\x00\x00\xF3\x0F\x2A\xC0\xC3";
-            memory->Write(aGetZFar, 10, bytePatch);
-            // std::cout << "ZFar instructions patched" << std::endl;
-        } else if (instructionBytes == 0x2a0ff300004650b8) { // already patched
+		if (instructionBytes == 0x83485708245c8948) { // not patched
 
-            // 0x48, 0x89, 0x5C, 0x24, 0x08 | mov qword ptr ss:[rsp+8], rbx
-            // 0x57							| push rdi
-            // 0x48, 0x83, 0xEC, 0x40       | sub rsp, 40
-            constexpr const char *byteRestore =
-                "\x48\x89\x5C\x24\x08\x57\x48\x83\xEC\x40";
-            memory->Write(aGetZFar, 10, byteRestore);
-            // std::cout << "ZFar instructions restored" << std::endl;
-        }
-    }
+			// 0xB8, 0x50, 0x46, 0x00, 0x00	| mov eax, 18000
+			// 0xF3, 0x0F, 0x2A, 0xC0		| cvtsi2ss xmm0, eax
+			// 0xC3							| ret
+			constexpr const char* bytePatch =
+				"\xB8\x50\x46\x00\x00\xF3\x0F\x2A\xC0\xC3";
+			memory->Write(aGetZFar, 10, bytePatch);
+			// std::cout << "ZFar instructions patched" << std::endl;
+		}
+		else if (instructionBytes == 0x2a0ff300004650b8) { // already patched
+
+			// 0x48, 0x89, 0x5C, 0x24, 0x08 | mov qword ptr ss:[rsp+8], rbx
+			// 0x57							| push rdi
+			// 0x48, 0x83, 0xEC, 0x40       | sub rsp, 40
+			constexpr const char* byteRestore =
+				"\x48\x89\x5C\x24\x08\x57\x48\x83\xEC\x40";
+			memory->Write(aGetZFar, 10, byteRestore);
+			// std::cout << "ZFar instructions restored" << std::endl;
+		}
+		else {
+			std::cout << "Error, unknown ZFAR instructions: " << instructionBytes
+				<< std::endl;
+			std::system("pause");
+			exit(1);
+		}
+	}
 };
 
-CDOTA_Camera FindCamera(blackbone::Process &proc) {
-    // std::vector<blackbone::ptr_t> search_result;
-    // typedef std::uintptr_t( __fastcall* CDOTACamera__Init )( );
-    // blackbone::PatternSearch aDOTACameraInit_Pattern{
-    // "\x48\x83\xEC\x38\xE8\xCC\xCC\xCC\xCC\x48\x85\xC0\x74\x4D" };
-    // aDOTACameraInit_Pattern.SearchRemote( proc, 0xCC, proc.modules(
-    // ).GetModule( L"client.dll" ).get( )->baseAddress, proc.modules(
-    // ).GetModule( L"client.dll" ).get( )->size, search_result, 1 );
-    // blackbone::RemoteFunction<CDOTACamera__Init> pFN( proc,
-    // search_result.front( ) );
+uint64_t GetLocalPlayer(blackbone::ProcessMemory& memory, blackbone::ModuleDataPtr& client) {
+	std::vector<blackbone::ptr_t> search_result;
 
-    // if ( auto result = pFN.Call( ); result.success( ) && result.result( ) ) {
-    //	return CDOTA_Camera{ &proc.memory( ), result.result( ) };
-    // }
+	blackbone::PatternSearch LocalPlayerArray_insn{ "\x48\x8B\x05\xCC\xCC\xCC\xCC\x89\xBE" };
+	LocalPlayerArray_insn.SearchRemote(
+		*memory.process(), 0xCC,
+		client->baseAddress,
+		client->size,
+		search_result, 1
+	);
 
-    // return CDOTA_Camera{ nullptr, 0 };
+	uint64_t localPlayer = *memory.Read<uint64_t>(memory.GetAbsoluteAddress(search_result.front(), 3, 7));
 
-    static std::vector<blackbone::ptr_t> search_result;
-    static bool first_use = true;
-    if (first_use) {
-        blackbone::PatternSearch g_pDOTACameraManager_pattern{
-            "\x48\x8d\x3d\xcc\xcc\xcc\xcc\x48\x8b\x14\xc8"};
-        g_pDOTACameraManager_pattern.SearchRemote(
-            proc, 0xCC,
-            proc.modules().GetModule(L"client.dll").get()->baseAddress,
-            proc.modules().GetModule(L"client.dll").get()->size, search_result,
-            1);
-        first_use = false;
-    }
+	return localPlayer;
+}
 
-    if (search_result.empty()) {
-        std::cout << "cant find dota camera\n";
-        getchar();
-        exit(1);
-    }
+CDOTA_Camera FindCamera(blackbone::Process& proc) {
+	// std::vector<blackbone::ptr_t> search_result;
+	// typedef std::uintptr_t( __fastcall* CDOTACamera__Init )( );
+	// blackbone::PatternSearch aDOTACameraInit_Pattern{
+	// "\x48\x83\xEC\x38\xE8\xCC\xCC\xCC\xCC\x48\x85\xC0\x74\x4D" };
+	// aDOTACameraInit_Pattern.SearchRemote( proc, 0xCC, proc.modules(
+	// ).GetModule( L"client.dll" ).get( )->baseAddress, proc.modules(
+	// ).GetModule( L"client.dll" ).get( )->size, search_result, 1 );
+	// blackbone::RemoteFunction<CDOTACamera__Init> pFN( proc,
+	// search_result.front( ) );
 
-    if (std::uintptr_t g_pDOTACameraManager =
-            GetAbsoluteAddress(&proc.memory(), search_result.front());
-        g_pDOTACameraManager) {
-        auto dotaCamera =
-            proc.memory().Read<std::uintptr_t>(g_pDOTACameraManager + 0x20);
+	// if ( auto result = pFN.Call( ); result.success( ) && result.result( ) ) {
+	//	return CDOTA_Camera{ &proc.memory( ), result.result( ) };
+	// }
 
-        if (dotaCamera.success() && dotaCamera.result())
-            return CDOTA_Camera{&proc.memory(), dotaCamera.result()};
-    }
+	// return CDOTA_Camera{ nullptr, 0 };
 
-    return CDOTA_Camera{nullptr, 0};
+	static std::vector<blackbone::ptr_t> search_result;
+	static bool first_use = true;
+	if (first_use) {
+		blackbone::PatternSearch g_pDOTACameraManager_pattern{
+			"\x48\x89\x74\x24\x40\x48\x89\x7C\x24\x50\x48\x8D\x00\x00\x00\x00\x00\x48\x8B\x04\xC8\x8B\x04\x02\x39" };
+		g_pDOTACameraManager_pattern.SearchRemote(
+			proc, 0x00,
+			proc.modules().GetModule(L"client.dll").get()->baseAddress,
+			proc.modules().GetModule(L"client.dll").get()->size, search_result,
+			1);
+		first_use = false;
+	}
+
+	if (search_result.empty()) {
+		std::cout << "cant find dota camera\n";
+		getchar();
+		exit(1);
+	}
+
+	if (std::uintptr_t g_pDOTACameraManager =
+		proc.memory().GetAbsoluteAddress(search_result.front() + 10); g_pDOTACameraManager) {
+		auto dotaCamera = proc.memory().Read<std::uintptr_t>(g_pDOTACameraManager + 0x20);
+
+		if (dotaCamera.success() && dotaCamera.result())
+			return CDOTA_Camera{ &proc.memory(), dotaCamera.result() };
+	}
+
+	return CDOTA_Camera{ nullptr, 0 };
 }
